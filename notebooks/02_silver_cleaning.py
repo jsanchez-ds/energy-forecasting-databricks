@@ -12,8 +12,10 @@ from pyspark.sql import Window
 from pyspark.sql import functions as F
 from delta.tables import DeltaTable
 
-BRONZE_PATH = "/mnt/energy/bronze/load"
-SILVER_PATH = "/mnt/energy/silver/load"
+dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+base_path = dbutils.widgets.get("base_path").rstrip("/")
+BRONZE_PATH = f"{base_path}/bronze/load"
+SILVER_PATH = f"{base_path}/silver/load"
 
 bronze = spark.read.format("delta").load(BRONZE_PATH)
 

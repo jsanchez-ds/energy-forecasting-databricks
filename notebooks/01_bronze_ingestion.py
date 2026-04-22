@@ -1,69 +1,122 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01 · Bronze Ingestion — ENTSO-E Load Data
+# MAGIC # 01 · Bronze Ingestion
 # MAGIC
-# MAGIC **Layer:** Bronze (raw, append-only Delta)
-# MAGIC **Source:** ENTSO-E Transparency Platform — hourly electricity load per country
-# MAGIC **Output:** `/mnt/energy/bronze/load` (Delta, partitioned by `country`)
+# MAGIC Pulls hourly electricity demand into the Bronze Delta table.
 # MAGIC
-# MAGIC This notebook is idempotent: re-running over an overlapping window merges on `(timestamp_utc, country, kind)`.
+# MAGIC * **Sources:** EIA Open Data (US) or ENTSO-E Transparency Platform (EU)
+# MAGIC * **Output:** `dbfs:/FileStore/energy/bronze/load`, partitioned by `country` / region
+# MAGIC * **Idempotent:** re-runs merge on `(timestamp_utc, country, kind)`
 
 # COMMAND ----------
 
-# MAGIC %pip install entsoe-py==0.6.11 tenacity==9.0.0 structlog==24.4.0 -q
+# MAGIC %pip install entsoe-py==0.6.11 tenacity==9.0.0 httpx==0.27.2 -q
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
 from datetime import datetime, timedelta, timezone
+from typing import Literal
+
+import httpx
 import pandas as pd
-from entsoe import EntsoePandasClient
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Parameters
+# MAGIC
+# MAGIC Community Edition does not have secret scopes enabled by default, so we
+# MAGIC pass the API key as a widget.
 
 # COMMAND ----------
 
-dbutils.widgets.text("country", "ES")
+dbutils.widgets.dropdown("source", "eia", ["eia", "entsoe"])
+dbutils.widgets.text("region", "CAL", label="EIA region / ENTSO-E country")
 dbutils.widgets.text("backfill_days", "30")
-dbutils.widgets.text("api_token_secret_scope", "energy")
-dbutils.widgets.text("api_token_secret_key", "entsoe_token")
+dbutils.widgets.text("api_key", "", label="EIA_API_KEY or ENTSOE_API_TOKEN")
+dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
 
-country = dbutils.widgets.get("country")
+source: Literal["eia", "entsoe"] = dbutils.widgets.get("source")  # type: ignore
+region = dbutils.widgets.get("region")
 backfill_days = int(dbutils.widgets.get("backfill_days"))
-api_token = dbutils.secrets.get(
-    dbutils.widgets.get("api_token_secret_scope"),
-    dbutils.widgets.get("api_token_secret_key"),
-)
+api_key = dbutils.widgets.get("api_key")
+base_path = dbutils.widgets.get("base_path").rstrip("/")
+BRONZE_PATH = f"{base_path}/bronze/load"
 
-BRONZE_PATH = f"/mnt/energy/bronze/load"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Fetch from ENTSO-E
-
-# COMMAND ----------
+assert api_key, "Paste your API key into the `api_key` widget (top of notebook)."
 
 now_utc = datetime.now(tz=timezone.utc)
 start_ts = pd.Timestamp(now_utc - timedelta(days=backfill_days), tz="UTC")
 end_ts = pd.Timestamp(now_utc, tz="UTC")
 
-client = EntsoePandasClient(api_key=api_token)
-series = client.query_load(country, start=start_ts, end=end_ts)
-if isinstance(series, pd.DataFrame):
-    series = series.iloc[:, 0]
+print(f"Source: {source}  Region: {region}  Window: {start_ts} → {end_ts}")
+print(f"Writing to: {BRONZE_PATH}")
 
-pdf = series.rename("load_mw").reset_index()
-pdf.columns = ["timestamp_utc", "load_mw"]
-pdf["timestamp_utc"] = pd.to_datetime(pdf["timestamp_utc"], utc=True)
-pdf["country"] = country
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Fetch
+
+# COMMAND ----------
+
+def fetch_eia(api_key: str, region: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    """Paginate the EIA v2 endpoint in 60-day windows."""
+    frames = []
+    cursor = start
+    while cursor < end:
+        window_end = min(cursor + pd.Timedelta(days=60), end)
+        params = {
+            "api_key": api_key,
+            "frequency": "hourly",
+            "data[0]": "value",
+            "facets[respondent][]": region,
+            "facets[type][]": "D",
+            "start": cursor.strftime("%Y-%m-%dT%H"),
+            "end": window_end.strftime("%Y-%m-%dT%H"),
+            "sort[0][column]": "period",
+            "sort[0][direction]": "asc",
+            "length": "5000",
+        }
+        r = httpx.get(
+            "https://api.eia.gov/v2/electricity/rto/region-data/data/",
+            params=params, timeout=60,
+        )
+        r.raise_for_status()
+        data = r.json().get("response", {}).get("data", [])
+        if data:
+            df = pd.DataFrame(data)
+            df["timestamp_utc"] = pd.to_datetime(df["period"], utc=True)
+            df["load_mw"] = pd.to_numeric(df["value"], errors="coerce").astype("float64")
+            frames.append(df[["timestamp_utc", "load_mw"]])
+        cursor = window_end
+    if not frames:
+        return pd.DataFrame(columns=["timestamp_utc", "load_mw"])
+    return pd.concat(frames, ignore_index=True).drop_duplicates("timestamp_utc").sort_values("timestamp_utc")
+
+
+def fetch_entsoe(api_key: str, country: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    from entsoe import EntsoePandasClient
+    client = EntsoePandasClient(api_key=api_key)
+    series = client.query_load(country, start=start, end=end)
+    if isinstance(series, pd.DataFrame):
+        series = series.iloc[:, 0]
+    df = series.rename("load_mw").reset_index()
+    df.columns = ["timestamp_utc", "load_mw"]
+    df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"], utc=True)
+    return df
+
+
+if source == "eia":
+    pdf = fetch_eia(api_key, region, start_ts, end_ts)
+else:
+    pdf = fetch_entsoe(api_key, region, start_ts, end_ts)
+
+pdf["country"] = region
 pdf["kind"] = "actual"
 pdf["ingested_at"] = now_utc
-
-print(f"Fetched {len(pdf)} rows for {country} ({start_ts} → {end_ts})")
+print(f"Fetched {len(pdf):,} rows")
+display(pdf.head(3))
 
 # COMMAND ----------
 
@@ -78,8 +131,7 @@ sdf = spark.createDataFrame(pdf)
 
 if DeltaTable.isDeltaTable(spark, BRONZE_PATH):
     (
-        DeltaTable.forPath(spark, BRONZE_PATH)
-        .alias("t")
+        DeltaTable.forPath(spark, BRONZE_PATH).alias("t")
         .merge(
             sdf.alias("s"),
             "t.timestamp_utc = s.timestamp_utc AND t.country = s.country AND t.kind = s.kind",
@@ -89,13 +141,14 @@ if DeltaTable.isDeltaTable(spark, BRONZE_PATH):
         .execute()
     )
 else:
-    (
-        sdf.write.format("delta")
-        .partitionBy("country")
-        .mode("overwrite")
-        .save(BRONZE_PATH)
-    )
+    sdf.write.format("delta").partitionBy("country").mode("overwrite").save(BRONZE_PATH)
+
+rows = spark.read.format("delta").load(BRONZE_PATH).count()
+print(f"Bronze total rows: {rows:,}")
 
 # COMMAND ----------
 
-display(spark.read.format("delta").load(BRONZE_PATH).orderBy("timestamp_utc", ascending=False).limit(10))
+display(
+    spark.read.format("delta").load(BRONZE_PATH)
+    .orderBy("timestamp_utc", ascending=False).limit(10)
+)

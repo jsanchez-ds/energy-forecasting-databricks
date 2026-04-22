@@ -13,8 +13,10 @@
 import numpy as np
 import pandas as pd
 
-SILVER_PATH = "/mnt/energy/silver/load"
-GOLD_PATH = "/mnt/energy/gold/load_features"
+dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+base_path = dbutils.widgets.get("base_path").rstrip("/")
+SILVER_PATH = f"{base_path}/silver/load"
+GOLD_PATH = f"{base_path}/gold/load_features"
 
 silver_pdf = (
     spark.read.format("delta").load(SILVER_PATH)
