@@ -48,6 +48,9 @@ spark-warehouse/
 metastore_db/
 derby.log
 
+# Hadoop winutils (Windows-only, downloaded via script — do not commit)
+vendor/hadoop/
+
 # IDE
 .idea/
 .vscode/

@@ -160,7 +160,9 @@ class EiaClient:
 
         df = pd.DataFrame(data)
         df["timestamp_utc"] = pd.to_datetime(df["period"], utc=True)
-        df["load_mw"] = pd.to_numeric(df["value"], errors="coerce")
+        # Force float64 — EIA sometimes returns integers, but the Bronze
+        # Delta schema pins DoubleType.
+        df["load_mw"] = pd.to_numeric(df["value"], errors="coerce").astype("float64")
         return df[["timestamp_utc", "load_mw"]].dropna()
 
     def close(self) -> None:
