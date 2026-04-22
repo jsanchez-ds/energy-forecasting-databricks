@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════
+# Energy Forecasting — main configuration
+# ═══════════════════════════════════════════════════════════════
+
+project:
+  name: energy-forecasting
+  version: 0.1.0
+
+ingestion:
+  source: entsoe
+  target_country: ES           # ENTSO-E bidding zone
+  resolution: PT60M            # hourly
+  backfill_years: 3            # years of historical data on first run
+  rate_limit_per_minute: 400   # ENTSO-E public limit
+
+storage:
+  bronze_path: data/bronze
+  silver_path: data/silver
+  gold_path: data/gold
+  format: delta
+
+features:
+  calendar:
+    - hour_of_day
+    - day_of_week
+    - day_of_month
+    - month
+    - is_weekend
+    - is_holiday_es
+  lags: [1, 24, 48, 168]       # 1h, 1d, 2d, 1w
+  rolling_windows: [24, 168]   # 1d, 1w rolling means/std
+  target: load_mw
+
+models:
+  forecasting:
+    - name: lightgbm
+      horizon_hours: 24
+      params:
+        n_estimators: 500
+        learning_rate: 0.05
+        num_leaves: 64
+        min_child_samples: 20
+        reg_alpha: 0.1
+        reg_lambda: 0.1
+    - name: prophet
+      horizon_hours: 24
+      params:
+        daily_seasonality: true
+        weekly_seasonality: true
+        yearly_seasonality: true
+  anomaly:
+    - name: isolation_forest
+      params:
+        contamination: 0.01
+        n_estimators: 200
+        random_state: 42
+
+evaluation:
+  test_size_days: 30
+  metrics: [mape, rmse, mae]
+  cv_folds: 5
+
+mlflow:
+  tracking_uri: ./mlruns
+  experiment_name: energy-forecasting
+  registry:
+    forecast_model_name: energy-demand-forecaster
+    anomaly_model_name: energy-anomaly-detector
+
+monitoring:
+  drift_threshold: 0.15        # share of drifted features → alert
+  reference_window_days: 60
+  current_window_days: 7
+
+serving:
+  host: 0.0.0.0
+  port: 8000
+  workers: 2
