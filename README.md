@@ -127,13 +127,41 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 
 ---
 
-## 📊 Results (updated after first training run)
+## 📊 Results — 2 years of CAISO data (2024-04-08 → 2026-04-22)
 
-| Model | Metric | Value |
-|---|---|---|
-| LightGBM (24h ahead) | MAPE | _TBD_ |
-| Prophet | MAPE | _TBD_ |
-| Isolation Forest | Precision@anomaly | _TBD_ |
+**Dataset:** 17,854 hourly observations of California grid demand pulled from EIA Open Data.
+**Test window:** 30 days holdout (718 hours).
+
+### Forecasting — MAPE on 30-day test set (lower is better)
+
+| Model                       | Family            | MAPE      | RMSE (MW) | MAE (MW) | Notes |
+|-----------------------------|-------------------|-----------|-----------|----------|-------|
+| **LightGBM** (winner)       | Gradient boosting | **1.81%** | **700**   | **533**  | Promoted to `@staging` |
+| LSTM (PyTorch, 168h window) | Deep learning     | 2.84%     | 1,053     | 817      | 2-layer, 64 hidden, 30 epochs CPU |
+| Prophet                     | Bayesian stats    | _skipped_ | —         | —        | `cmdstan` needs MinGW on Windows |
+
+LightGBM wins on this benchmark by a comfortable margin — as expected for well-engineered tabular features on hourly data. The LSTM is a respectable runner-up and would likely close the gap with hyperparameter tuning (longer sequences, larger hidden size, attention heads).
+
+### Anomaly detection
+
+| Model            | Anomalies found | Rate   | Score range        |
+|------------------|-----------------|--------|--------------------|
+| Isolation Forest | 179 / 17,854    | 1.00%  | -0.08 → 0.24       |
+
+### Explainability (SHAP on the LightGBM winner)
+
+The LightGBM model ships with SHAP artifacts logged to MLflow (`shap/shap_bar.png`, `shap/shap_beeswarm.png`, `shap/shap_values.csv`) so any consumer of the model can see which features drive predictions.
+
+The top drivers (by mean |SHAP|) are the recent load lags (`load_mw_clean_lag_1`, `load_mw_clean_lag_24`) and calendar cyclic encodings (`hour_sin`, `hour_cos`), matching the intuition that grid demand is dominated by strong diurnal + weekly seasonality plus persistence.
+
+### Screenshots
+
+<!-- Drop in PNGs once captured; see docs/images/. -->
+
+| Streamlit dashboard                 | MLflow experiments                   |
+|-------------------------------------|--------------------------------------|
+| ![dashboard](docs/images/dashboard.png) | ![mlflow](docs/images/mlflow_experiments.png) |
+| _17.8k records, duck curve hourly profile._ | _LightGBM + LSTM runs side by side with metrics + SHAP artifacts._ |
 
 ---
 
