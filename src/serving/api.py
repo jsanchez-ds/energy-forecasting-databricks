@@ -18,7 +18,7 @@ import mlflow
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response
 
 from src.utils.config import get_env, load_yaml_config
@@ -69,6 +69,10 @@ class ForecastRequest(BaseModel):
 
 
 class ForecastResponse(BaseModel):
+    # Disable Pydantic's 'model_*' protected namespace since our domain uses
+    # 'model_version' / 'model_name' in the ML sense, not the Pydantic sense.
+    model_config = ConfigDict(protected_namespaces=())
+
     predictions: list[float]
     model_version: str
     model_name: str
