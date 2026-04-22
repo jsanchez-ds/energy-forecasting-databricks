@@ -12,7 +12,11 @@ from pyspark.sql import Window
 from pyspark.sql import functions as F
 from delta.tables import DeltaTable
 
-dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+dbutils.widgets.text(
+    "base_path",
+    "/Volumes/workspace/default/energy",
+    label="Delta base path (Unity Catalog volume; override with dbfs:/... on classic DBR)",
+)
 base_path = dbutils.widgets.get("base_path").rstrip("/")
 BRONZE_PATH = f"{base_path}/bronze/load"
 SILVER_PATH = f"{base_path}/silver/load"

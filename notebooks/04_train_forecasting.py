@@ -21,7 +21,11 @@ import lightgbm as lgb
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 
-dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+dbutils.widgets.text(
+    "base_path",
+    "/Volumes/workspace/default/energy",
+    label="Delta base path (Unity Catalog volume; override with dbfs:/... on classic DBR)",
+)
 base_path = dbutils.widgets.get("base_path").rstrip("/")
 GOLD_PATH = f"{base_path}/gold/load_features"
 EXPERIMENT = "/Shared/energy-forecasting"

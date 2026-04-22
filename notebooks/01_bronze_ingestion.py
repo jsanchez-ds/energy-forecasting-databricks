@@ -42,7 +42,14 @@ dbutils.widgets.dropdown("source", "eia", ["eia", "entsoe"])
 dbutils.widgets.text("region", "CAL", label="EIA region / ENTSO-E country")
 dbutils.widgets.text("backfill_days", "30")
 dbutils.widgets.text("api_key", "", label="EIA_API_KEY or ENTSOE_API_TOKEN")
-dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+# Default targets a Unity Catalog volume (works on Databricks Free Edition
+# and any UC-enabled workspace). On DBR classic (e.g. Community Edition)
+# override with `dbfs:/FileStore/energy`.
+dbutils.widgets.text(
+    "base_path",
+    "/Volumes/workspace/default/energy",
+    label="Delta base path",
+)
 
 source: Literal["eia", "entsoe"] = dbutils.widgets.get("source")  # type: ignore
 region = dbutils.widgets.get("region")
@@ -59,6 +66,18 @@ end_ts = now_utc
 
 print(f"Source: {source}  Region: {region}  Window: {start_ts} → {end_ts}")
 print(f"Writing to: {BRONZE_PATH}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Ensure the Unity Catalog volume exists (no-op on classic DBFS)
+
+# COMMAND ----------
+
+if base_path.startswith("/Volumes/"):
+    _, _, catalog, schema, volume, *_ = base_path.split("/")
+    spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.{volume}")
+    print(f"Volume ready: /Volumes/{catalog}/{schema}/{volume}")
 
 # COMMAND ----------
 

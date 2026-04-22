@@ -13,7 +13,11 @@
 import numpy as np
 import pandas as pd
 
-dbutils.widgets.text("base_path", "dbfs:/FileStore/energy", label="Delta base path")
+dbutils.widgets.text(
+    "base_path",
+    "/Volumes/workspace/default/energy",
+    label="Delta base path (Unity Catalog volume; override with dbfs:/... on classic DBR)",
+)
 base_path = dbutils.widgets.get("base_path").rstrip("/")
 SILVER_PATH = f"{base_path}/silver/load"
 GOLD_PATH = f"{base_path}/gold/load_features"
