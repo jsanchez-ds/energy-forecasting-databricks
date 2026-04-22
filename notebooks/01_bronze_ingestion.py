@@ -10,8 +10,10 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install entsoe-py==0.6.11 tenacity==9.0.0 httpx==0.27.2 -q
-# MAGIC dbutils.library.restartPython()
+# Databricks Runtime 15+ already ships httpx, pandas and tenacity.
+# If you need ENTSO-E (entsoe-py), install it at cluster level via
+# Compute → Libraries instead of a notebook-scoped %pip install, which
+# can be unreliable on Community Edition.
 
 # COMMAND ----------
 
