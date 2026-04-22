@@ -15,7 +15,6 @@
 
 # COMMAND ----------
 
-from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
@@ -46,9 +45,9 @@ BRONZE_PATH = f"{base_path}/bronze/load"
 
 assert api_key, "Paste your API key into the `api_key` widget (top of notebook)."
 
-now_utc = datetime.now(tz=timezone.utc)
-start_ts = pd.Timestamp(now_utc - timedelta(days=backfill_days), tz="UTC")
-end_ts = pd.Timestamp(now_utc, tz="UTC")
+now_utc = pd.Timestamp.now(tz="UTC")
+start_ts = now_utc - pd.Timedelta(days=backfill_days)
+end_ts = now_utc
 
 print(f"Source: {source}  Region: {region}  Window: {start_ts} → {end_ts}")
 print(f"Writing to: {BRONZE_PATH}")
