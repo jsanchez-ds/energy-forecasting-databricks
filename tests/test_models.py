@@ -55,6 +55,33 @@ def test_compute_metrics_zero_error() -> None:
     assert m.mape == 0.0 and m.rmse == 0.0 and m.mae == 0.0
 
 
+def test_lstm_forecaster_runs(sample_gold_df: pd.DataFrame) -> None:
+    """LSTM must fit and produce finite predictions on synthetic data."""
+    import numpy as np
+
+    try:
+        from src.models.lstm_forecaster import LSTMConfig, LSTMForecaster
+    except ImportError:
+        import pytest
+
+        pytest.skip("torch not installed")
+
+    # Tiny config so the test runs in <10s on CPU. seq_len must be smaller
+    # than the val split (the 2-week synthetic fixture yields ~12 val rows).
+    cfg = LSTMConfig(
+        seq_len=6, hidden_size=16, num_layers=1, dropout=0.0,
+        lr=1e-2, batch_size=32, epochs=3, patience=2, device="cpu", seed=0,
+    )
+    train, test = time_split(sample_gold_df, test_days=2)
+    model = LSTMForecaster(cfg=cfg)
+    model.fit(train)
+    preds = model.predict(test)
+    # First seq_len predictions are NaN by design; the rest must be finite
+    tail = preds[cfg.seq_len:]
+    assert len(tail) > 0
+    assert np.all(np.isfinite(tail)), "LSTM produced NaN/Inf predictions"
+
+
 def test_anomaly_detector_fit_predict(sample_gold_df: pd.DataFrame) -> None:
     detector = AnomalyDetector(params={"n_estimators": 50, "contamination": 0.05, "random_state": 0})
     detector.fit(sample_gold_df)

@@ -25,9 +25,12 @@ def test_model_info_endpoint() -> None:
 
 
 def test_predict_without_model_returns_503() -> None:
-    api_module.STATE["forecast_model"] = None
-    api_module.STATE["forecast_model_name"] = "energy-demand-forecaster"
+    # Entering the TestClient fires the lifespan, which will try to load
+    # a real model from MLflow if one is registered. We override STATE
+    # *after* lifespan has run so the endpoint sees no model.
     with TestClient(api_module.app) as client:
+        api_module.STATE["forecast_model"] = None
+        api_module.STATE["forecast_model_name"] = "energy-demand-forecaster"
         payload = {
             "rows": [
                 {
