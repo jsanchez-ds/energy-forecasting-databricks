@@ -40,16 +40,18 @@ def load_gold() -> pd.DataFrame:
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 st.sidebar.title("⚡ Energy Forecasting")
 st.sidebar.caption("Real-time demand forecast + anomaly detection")
-country = st.sidebar.selectbox("Country", options=["ES", "DE_LU", "FR", "IT_NORD"], index=0)
-horizon = st.sidebar.slider("Forecast horizon (hours)", 1, 168, 24)
 
 try:
     df = load_gold()
     df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"], utc=True)
-    df = df[df["country"] == country].sort_values("timestamp_utc")
 except Exception as exc:
     st.error(f"Could not load Gold table at `{GOLD_PATH}`: {exc}")
     st.stop()
+
+available_regions = sorted(df["country"].unique().tolist())
+country = st.sidebar.selectbox("Region", options=available_regions, index=0)
+horizon = st.sidebar.slider("Forecast horizon (hours)", 1, 168, 24)
+df = df[df["country"] == country].sort_values("timestamp_utc")
 
 # ── Header KPIs ─────────────────────────────────────────────────────────────
 st.title("Energy Demand — Forecast & Anomalies")
