@@ -1,9 +1,9 @@
 """
 Bronze ingestion runner.
 
-Fetches raw load data from ENTSO-E and persists it as a Delta table
-(append-only, schema-preserved). Idempotent: re-runs overwrite overlapping
-dates via a merge by (timestamp_utc, country, kind).
+Fetches raw load data from the configured source (ENTSO-E or EIA) and persists
+it as a Delta table (append-only, schema-preserved). Idempotent: re-runs
+overwrite overlapping dates via a merge by (timestamp_utc, country, kind).
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from delta.tables import DeltaTable
-from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DoubleType,
     StringType,
@@ -22,7 +21,6 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from src.ingestion.entsoe_client import EntsoeClient
 from src.utils.config import get_env, load_yaml_config
 from src.utils.logging import configure_logging, get_logger
 from src.utils.spark import get_spark
@@ -41,26 +39,69 @@ BRONZE_SCHEMA = StructType(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest ENTSO-E load → Bronze Delta table")
+    parser = argparse.ArgumentParser(description="Ingest load data → Bronze Delta table")
     parser.add_argument("--start", type=str, help="YYYY-MM-DD (UTC). Defaults to 7 days ago.")
     parser.add_argument("--end", type=str, help="YYYY-MM-DD (UTC). Defaults to today.")
-    parser.add_argument("--country", type=str, default=None, help="Override target country.")
+    parser.add_argument(
+        "--source",
+        type=str,
+        choices=["entsoe", "eia"],
+        default=None,
+        help="Override DATA_SOURCE from .env",
+    )
+    parser.add_argument(
+        "--region",
+        type=str,
+        default=None,
+        help="ENTSO-E country (ES, DE_LU, ...) or EIA region (CAL, ERCO, PJM, ...)",
+    )
     return parser.parse_args()
 
 
-def run(start: str | None = None, end: str | None = None, country: str | None = None) -> None:
+def _fetch(
+    source: str,
+    region: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    env,
+):
+    """Dispatch to the correct client based on source."""
+    if source == "entsoe":
+        from src.ingestion.entsoe_client import EntsoeClient
+
+        client = EntsoeClient(api_token=env.entsoe_api_token, country_code=region)
+        return client.fetch_load(start=start_dt, end=end_dt, kind="actual")
+    elif source == "eia":
+        from src.ingestion.eia_client import EiaClient
+
+        with EiaClient(api_key=env.eia_api_key, region=region) as client:
+            return client.fetch_load(start=start_dt, end=end_dt, kind="actual")
+    else:
+        raise ValueError(f"Unknown source: {source!r}")
+
+
+def run(
+    start: str | None = None,
+    end: str | None = None,
+    source: str | None = None,
+    region: str | None = None,
+) -> None:
     env = get_env()
     cfg = load_yaml_config()
 
-    country = country or cfg["ingestion"]["target_country"]
+    source = source or env.data_source
+    if source == "entsoe":
+        region = region or env.target_country
+    else:
+        region = region or env.target_region
+
     now_utc = datetime.now(tz=timezone.utc)
     start_dt = datetime.fromisoformat(start) if start else (now_utc - timedelta(days=7))
     end_dt = datetime.fromisoformat(end) if end else now_utc
 
-    log.info("bronze.start", country=country, start=str(start_dt), end=str(end_dt))
+    log.info("bronze.start", source=source, region=region, start=str(start_dt), end=str(end_dt))
 
-    client = EntsoeClient(api_token=env.entsoe_api_token, country_code=country)
-    pdf = client.fetch_load(start=start_dt, end=end_dt, kind="actual")
+    pdf = _fetch(source, region, start_dt, end_dt, env)
     pdf["ingested_at"] = now_utc
 
     if pdf.empty:
@@ -102,4 +143,4 @@ def run(start: str | None = None, end: str | None = None, country: str | None = 
 if __name__ == "__main__":
     configure_logging(level=get_env().log_level)
     args = parse_args()
-    run(start=args.start, end=args.end, country=args.country)
+    run(start=args.start, end=args.end, source=args.source, region=args.region)

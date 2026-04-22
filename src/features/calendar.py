@@ -6,13 +6,53 @@ import numpy as np
 import pandas as pd
 
 
-SPAIN_HOLIDAYS_MMDD = {
-    "01-01", "01-06", "05-01", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25",
+# Fixed-date holidays per country (month-day). For moving holidays we use the
+# `holidays` package dynamically in `_holiday_flag`.
+HOLIDAYS_MMDD: dict[str, set[str]] = {
+    "ES": {"01-01", "01-06", "05-01", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25"},
+    "US": {"01-01", "07-04", "11-11", "12-25"},
 }
 
 
-def add_calendar_features(df: pd.DataFrame, ts_col: str = "timestamp_utc") -> pd.DataFrame:
-    """Append calendar/time features in-place-ish (returns a copy)."""
+def _holiday_flag(ts: pd.Series, country: str) -> pd.Series:
+    """Return an int Series flagging holidays using the `holidays` package.
+
+    Falls back to the fixed MMDD set if the package is unavailable.
+    """
+    try:
+        import holidays as _holidays_pkg
+
+        years = list(range(int(ts.dt.year.min()), int(ts.dt.year.max()) + 1))
+        if country.upper() in {"US"}:
+            cal = _holidays_pkg.country_holidays("US", years=years)
+        elif country.upper() in {"ES"}:
+            cal = _holidays_pkg.country_holidays("ES", years=years)
+        else:
+            cal = {}
+        return ts.dt.date.isin(cal).astype(int)
+    except Exception:
+        mmdd = ts.dt.strftime("%m-%d")
+        fallback = HOLIDAYS_MMDD.get(country.upper(), set())
+        return mmdd.isin(fallback).astype(int)
+
+
+def add_calendar_features(
+    df: pd.DataFrame,
+    ts_col: str = "timestamp_utc",
+    country: str = "ES",
+) -> pd.DataFrame:
+    """Append calendar/time features in-place-ish (returns a copy).
+
+    Parameters
+    ----------
+    df : DataFrame
+        Must contain `ts_col` as UTC timestamps.
+    ts_col : str
+        Name of the timestamp column.
+    country : str
+        ISO-2 country / region code used for the holiday feature.
+        Accepts ENTSO-E codes ("ES", "DE_LU", ...) — the prefix is used.
+    """
     out = df.copy()
     ts = pd.to_datetime(out[ts_col], utc=True)
 
@@ -33,8 +73,10 @@ def add_calendar_features(df: pd.DataFrame, ts_col: str = "timestamp_utc") -> pd
     out["month_sin"] = np.sin(2 * np.pi * out["month"] / 12)
     out["month_cos"] = np.cos(2 * np.pi * out["month"] / 12)
 
-    mmdd = ts.dt.strftime("%m-%d")
-    out["is_holiday_es"] = mmdd.isin(SPAIN_HOLIDAYS_MMDD).astype(int)
+    # Keep the historical column name for ES; add a generic one too.
+    country_norm = country.upper().split("_")[0]
+    out["is_holiday"] = _holiday_flag(ts, country_norm)
+    out["is_holiday_es"] = out["is_holiday"]  # backward compat
     return out
 
 

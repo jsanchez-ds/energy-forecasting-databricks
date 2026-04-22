@@ -7,11 +7,16 @@ project:
   version: 0.1.0
 
 ingestion:
-  source: entsoe
-  target_country: ES           # ENTSO-E bidding zone
-  resolution: PT60M            # hourly
+  # Active source is chosen via DATA_SOURCE env var. Both are supported.
+  entsoe:
+    target_country: ES         # ENTSO-E bidding zone
+    resolution: PT60M          # hourly
+    rate_limit_per_minute: 400 # ENTSO-E public limit
+  eia:
+    target_region: CAL         # Balancing Authority (CAL, ERCO, PJM, ...)
+    resolution: hourly
+    rate_limit_per_minute: 500 # EIA public limit
   backfill_years: 3            # years of historical data on first run
-  rate_limit_per_minute: 400   # ENTSO-E public limit
 
 storage:
   bronze_path: data/bronze

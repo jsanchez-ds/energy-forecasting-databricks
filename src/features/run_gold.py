@@ -25,10 +25,10 @@ from src.utils.spark import get_spark
 log = get_logger(__name__)
 
 
-def build_features(pdf: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def build_features(pdf: pd.DataFrame, cfg: dict, country: str = "ES") -> pd.DataFrame:
     """Build the Gold feature set from a cleaned Silver pandas DataFrame."""
     pdf = pdf.sort_values("timestamp_utc").reset_index(drop=True)
-    pdf = add_calendar_features(pdf, ts_col="timestamp_utc")
+    pdf = add_calendar_features(pdf, ts_col="timestamp_utc", country=country)
     pdf = add_lag_features(pdf, target="load_mw_clean", lags=cfg["features"]["lags"])
     pdf = add_rolling_features(
         pdf, target="load_mw_clean", windows=cfg["features"]["rolling_windows"]
@@ -56,7 +56,7 @@ def run() -> None:
 
     frames = []
     for country, group in silver_pdf.groupby("country"):
-        feats = build_features(group, cfg)
+        feats = build_features(group, cfg, country=str(country))
         frames.append(feats)
     gold_pdf = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
