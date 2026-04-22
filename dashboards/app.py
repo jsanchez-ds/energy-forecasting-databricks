@@ -136,7 +136,8 @@ try:
 except Exception as exc:
     st.warning(f"API not reachable at `{API_URL}`: {exc}")
 
+source_label = "EIA Open Data" if country in {"CAL", "ERCO", "PJM", "MISO", "NYIS", "ISNE", "SWPP", "US48"} else "ENTSO-E Transparency Platform"
 st.caption(
-    "Built with Databricks · Delta Lake · MLflow · FastAPI · Streamlit · "
-    "data from ENTSO-E Transparency Platform."
+    f"Built with Databricks · Delta Lake · MLflow · FastAPI · Streamlit · "
+    f"data from **{source_label}**."
 )

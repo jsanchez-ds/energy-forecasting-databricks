@@ -1,0 +1,61 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Databricks Jobs (only used on the `dev` / `prod` targets — Community
+# Edition does not expose the Jobs API, so these are silently skipped there.)
+# ═══════════════════════════════════════════════════════════════════════════
+
+resources:
+  jobs:
+    energy_forecasting_pipeline:
+      name: "[${bundle.target}] energy-forecasting — full pipeline"
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"   # daily at 06:00 UTC
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      tasks:
+        - task_key: bronze
+          notebook_task:
+            notebook_path: ${var.notebook_path}/01_bronze_ingestion
+            base_parameters:
+              country: "ES"
+              backfill_days: "3"
+          job_cluster_key: etl_cluster
+
+        - task_key: silver
+          depends_on:
+            - task_key: bronze
+          notebook_task:
+            notebook_path: ${var.notebook_path}/02_silver_cleaning
+          job_cluster_key: etl_cluster
+
+        - task_key: gold
+          depends_on:
+            - task_key: silver
+          notebook_task:
+            notebook_path: ${var.notebook_path}/03_gold_features
+          job_cluster_key: etl_cluster
+
+        - task_key: train
+          depends_on:
+            - task_key: gold
+          notebook_task:
+            notebook_path: ${var.notebook_path}/04_train_forecasting
+          job_cluster_key: ml_cluster
+
+      job_clusters:
+        - job_cluster_key: etl_cluster
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: Standard_DS3_v2        # Azure; replace for AWS
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+        - job_cluster_key: ml_cluster
+          new_cluster:
+            spark_version: 15.4.x-cpu-ml-scala2.12
+            node_type_id: Standard_DS3_v2
+            num_workers: 2
+            data_security_mode: SINGLE_USER
+
+      email_notifications:
+        on_failure:
+          - jonathan@example.com

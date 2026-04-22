@@ -1,0 +1,47 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Databricks Asset Bundle — energy-forecasting
+# ═══════════════════════════════════════════════════════════════════════════
+# Docs: https://docs.databricks.com/dev-tools/bundles/
+#
+# Deploy:   databricks bundle deploy -t dev
+# Run job:  databricks bundle run -t dev energy_forecasting_pipeline
+# ---------------------------------------------------------------------------
+
+bundle:
+  name: energy-forecasting
+
+variables:
+  catalog:
+    description: Unity Catalog name (use 'hive_metastore' on Community Edition)
+    default: hive_metastore
+  schema:
+    description: Target schema / database
+    default: energy
+  notebook_path:
+    description: Workspace folder where the notebooks land
+    default: /Shared/energy-forecasting
+
+include:
+  - resources/*.yml
+
+targets:
+  # Community Edition — single-node, no Jobs API available for scheduling,
+  # but we can still upload notebooks and run them manually.
+  community:
+    mode: development
+    default: true
+    workspace:
+      host: https://community.cloud.databricks.com
+    variables:
+      catalog: hive_metastore
+
+  # Professional workspace on Azure / AWS (Unity Catalog + Jobs).
+  dev:
+    mode: development
+    workspace:
+      host: ${DATABRICKS_HOST}   # set via env
+
+  prod:
+    mode: production
+    workspace:
+      host: ${DATABRICKS_HOST}
