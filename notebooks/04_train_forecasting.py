@@ -18,6 +18,7 @@ import mlflow.sklearn
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from mlflow.models import infer_signature
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 
@@ -75,7 +76,16 @@ with mlflow.start_run(run_name="lightgbm-forecaster") as run:
 
     mlflow.log_params({f"lgb_{k}": v for k, v in params.items()})
     mlflow.log_metrics({"mape": mape, "rmse": rmse, "mae": mae})
-    mlflow.lightgbm.log_model(model, artifact_path="model")
+
+    # Unity Catalog requires a signature on every logged model.
+    sig_X = test[FEATURE_COLS].iloc[:5]
+    signature = infer_signature(sig_X, model.predict(sig_X))
+    mlflow.lightgbm.log_model(
+        model,
+        artifact_path="model",
+        signature=signature,
+        input_example=sig_X,
+    )
     lgb_run_id = run.info.run_id
     print(f"LightGBM · MAPE {mape:.4f} · RMSE {rmse:,.1f} · MAE {mae:,.1f}")
 
@@ -104,7 +114,16 @@ with mlflow.start_run(run_name="isolation-forest-anomaly") as run:
 
     mlflow.log_params({"contamination": 0.01, "n_estimators": 200})
     mlflow.log_metric("anomaly_rate", rate)
-    mlflow.sklearn.log_model(detector, artifact_path="model")
+
+    # Unity Catalog signature requirement (same as the forecaster above).
+    sig_X = X.iloc[:5]
+    signature = infer_signature(sig_X, detector.predict(sig_X))
+    mlflow.sklearn.log_model(
+        detector,
+        artifact_path="model",
+        signature=signature,
+        input_example=sig_X,
+    )
     an_run_id = run.info.run_id
     print(f"Anomaly rate {rate:.4f}")
 
