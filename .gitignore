@@ -65,3 +65,10 @@ logs/
 
 # Docker
 .dockerignore
+
+# Training artifacts — current ones are committed as README examples;
+# future runs regenerate them locally, don't re-commit.
+artifacts/
+!artifacts/shap/shap_bar.png
+!artifacts/shap/shap_beeswarm.png
+!artifacts/lstm/training_curve.png

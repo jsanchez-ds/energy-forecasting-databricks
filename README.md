@@ -152,16 +152,26 @@ LightGBM wins on this benchmark by a comfortable margin — as expected for well
 
 The LightGBM model ships with SHAP artifacts logged to MLflow (`shap/shap_bar.png`, `shap/shap_beeswarm.png`, `shap/shap_values.csv`) so any consumer of the model can see which features drive predictions.
 
-The top drivers (by mean |SHAP|) are the recent load lags (`load_mw_clean_lag_1`, `load_mw_clean_lag_24`) and calendar cyclic encodings (`hour_sin`, `hour_cos`), matching the intuition that grid demand is dominated by strong diurnal + weekly seasonality plus persistence.
+| Mean |SHAP| (global importance) | Feature-level impact distribution |
+|---|---|
+| ![shap bar](docs/images/shap_bar.png) | ![shap beeswarm](docs/images/shap_beeswarm.png) |
 
-### Screenshots
+The top drivers are the recent load lags (`load_mw_clean_lag_1`, `load_mw_clean_lag_24`) and calendar cyclic encodings (`hour_sin`, `hour_cos`), matching the intuition that grid demand is dominated by strong diurnal + weekly seasonality plus persistence.
 
-<!-- Drop in PNGs once captured; see docs/images/. -->
+### LSTM training curve
 
-| Streamlit dashboard                 | MLflow experiments                   |
-|-------------------------------------|--------------------------------------|
+![lstm training curve](docs/images/lstm_training_curve.png)
+
+Validation loss flattens around epoch 10; early stopping (patience=5) kicks in soon after.
+
+### UI screenshots
+
+<!-- User-captured — see docs/images/README.md for the capture checklist. -->
+
+| Streamlit dashboard | MLflow experiments |
+|---|---|
 | ![dashboard](docs/images/dashboard.png) | ![mlflow](docs/images/mlflow_experiments.png) |
-| _17.8k records, duck curve hourly profile._ | _LightGBM + LSTM runs side by side with metrics + SHAP artifacts._ |
+| _17.8k records, California duck curve._ | _LightGBM + LSTM runs side by side with metrics + SHAP artifacts._ |
 
 ---
 
