@@ -164,7 +164,43 @@ The top drivers are the recent load lags (`load_mw_clean_lag_1`, `load_mw_clean_
 
 Validation loss flattens around epoch 10; early stopping (patience=5) kicks in soon after.
 
-### UI screenshots
+---
+
+## 🏗️ Running on Databricks (Free Edition + Unity Catalog)
+
+The same code runs end-to-end on Databricks Free Edition against a **Unity Catalog** workspace — Bronze/Silver/Gold as Delta tables inside a UC volume, MLflow experiments tracked at workspace level, and the winning model promoted to the Unity Catalog Model Registry with a `@staging` alias.
+
+Benchmark on **400 days of CAISO hourly data** pulled fresh inside Databricks:
+
+| Metric | Local pipeline | Databricks Free Edition |
+|---|---|---|
+| LightGBM MAPE | **1.81 %** | **1.83 %** |
+| LightGBM RMSE (MW) | 700 | 705 |
+| Isolation Forest anomaly rate | 1.00 % | 1.01 % |
+
+Near-identical results across environments — the pipeline is reproducible and portable, not environment-coupled.
+
+### Unity Catalog volume (Bronze / Silver / Gold as Delta)
+
+![Unity Catalog volumes](docs/images/databricks_catalog.png)
+
+The Medallion layers live under `workspace.default.energy/` as a UC-managed volume, so they inherit workspace-level governance, lineage and access control — no DBFS root needed.
+
+### MLflow experiment — runs + metrics
+
+![MLflow experiment](docs/images/databricks_experiment.png)
+
+Each training run logs params, metrics and the signed model artifact. The `lightgbm-forecaster` and `isolation-forest-anomaly` runs are compared side by side.
+
+### Unity Catalog Model Registry — `@staging` alias
+
+![Unity Catalog model registry](docs/images/databricks_registry.png)
+
+`workspace.default.energy-demand-forecaster` version 1 carries the `@staging` alias with a full input/output signature, ready to be served via Databricks Model Serving or consumed by the local FastAPI microservice via `models:/...@staging`.
+
+---
+
+## 📸 UI screenshots (local stack)
 
 <!-- User-captured — see docs/images/README.md for the capture checklist. -->
 
